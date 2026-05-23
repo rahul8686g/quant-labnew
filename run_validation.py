@@ -23,7 +23,7 @@ sys.path.insert(0, str(HERE))
 
 import pandas as pd
 
-from tools.data_loader import load_mt5_csv, quality_check, resample
+from tools.data_loader import load_mt5_csv, quality_check, resample, fetch_yahoo
 from tools.time_utils import in_any_session
 from tools.metrics import summary
 from backtest_engine import BacktestEngine
@@ -225,9 +225,30 @@ def main(csv_path: str | None = None, account: float = 10_000.0, risk_pct: float
     t0 = time.time()
     log(f"# quant-lab autonomous validation\n# data: {csv_path}")
 
-    # ---- Phase 1: data
-    df_m5 = load_mt5_csv(csv_path)
+    # ---- Phase 1: data — try local CSV first, else fall back to Yahoo Finance
+    src = Path(csv_path)
+    data_source = "local_csv"
+    if src.is_file():
+        df_m5 = load_mt5_csv(src)
+    else:
+        log(f"# CSV not found at {csv_path} — fetching from Yahoo Finance")
+        # treat the path basename (or the whole arg) as a Yahoo symbol
+        symbol_guess = src.stem.split("_")[0] if "_" in src.stem else (src.stem or csv_path)
+        try:
+            df_m5 = fetch_yahoo(symbol_guess, interval="5m")
+            data_source = f"yahoo:{symbol_guess}"
+            log(f"# fetched {len(df_m5):,} bars from Yahoo for '{symbol_guess}'")
+        except Exception as e:
+            log_path.write_text("\n".join(log_lines), encoding="utf-8")
+            print(json.dumps({
+                "verdict": "REJECTED_NO_DATA",
+                "csv_path": csv_path,
+                "yahoo_attempt": symbol_guess,
+                "error": str(e),
+            }, indent=2))
+            return
     q = quality_check(df_m5)
+    q["source"] = data_source
     log(f"# data {q['rows']:,} rows  usable={q['usable_pct']}%  range={q['range']}")
     if q["usable_pct"] < 95:
         log_path.write_text("\n".join(log_lines), encoding="utf-8")
