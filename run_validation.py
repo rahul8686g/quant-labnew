@@ -210,9 +210,20 @@ def evaluate_candidate(cand: dict, df_full: pd.DataFrame, session_mask, log) -> 
 
 
 # ----------------------------------------------------------- main
-def main(csv_path: str | None = None, account: float = 10_000.0, risk_pct: float = 0.5):
+def main(csv_path: str | None = None,
+         account: float = 10_000.0,
+         risk_pct: float = 0.5,
+         exec_tf: str = "15min",
+         sessions: list[str] | None = None,
+         only_family: str | None = None):
     """Run the full validation pipeline. Prints ONLY the final JSON to stdout.
-    All progress logs go to report/run.log per CLAUDE.md output rules."""
+    All progress logs go to <run_dir>/run.log per CLAUDE.md output rules.
+
+    Overrides (used by auto_refine wrapper, otherwise default):
+      exec_tf      : resample target ('15min','30min','1H','4H')
+      sessions     : list of session names — defaults to ['asian','london','newyork']
+      only_family  : restrict to single strategy family (e.g. 'trend_v1')
+    """
     csv_path = csv_path or str(HERE / "data" / "XAUUSD_M5.csv")
     # Per-run output folder so reports never overwrite each other.
     # Name: report/run_YYYYMMDD-HHMMSS_<symbol-guess>/
@@ -260,13 +271,24 @@ def main(csv_path: str | None = None, account: float = 10_000.0, risk_pct: float
         print(json.dumps({"verdict": "REJECTED_DATA_QUALITY", "data_report": q}, indent=2))
         return
 
-    df_m15 = resample(df_m5, "15min")
-    log(f"# resampled to M15: {len(df_m15):,} bars")
-    session = in_any_session(df_m15.index, ["asian", "london", "newyork"])
+    df_m15 = resample(df_m5, exec_tf)
+    log(f"# resampled to {exec_tf}: {len(df_m15):,} bars")
+    sessions_use = sessions or ["asian", "london", "newyork"]
+    session = in_any_session(df_m15.index, sessions_use)
+    log(f"# sessions enabled: {sessions_use}")
+
+    # filter candidates if only_family override given
+    cand_list = CANDIDATES
+    if only_family:
+        cand_list = [c for c in CANDIDATES if c["name"] == only_family]
+        if not cand_list:
+            cand_list = CANDIDATES   # fallback if name didn't match
+        else:
+            log(f"# restricted to single family: {only_family}")
 
     # ---- Phase 2-4: evaluate candidates
     results = []
-    for cand in CANDIDATES:
+    for cand in cand_list:
         try:
             results.append(evaluate_candidate(cand, df_m15, session, log))
         except Exception as e:
