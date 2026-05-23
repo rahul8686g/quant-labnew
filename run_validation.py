@@ -214,9 +214,14 @@ def main(csv_path: str | None = None, account: float = 10_000.0, risk_pct: float
     """Run the full validation pipeline. Prints ONLY the final JSON to stdout.
     All progress logs go to report/run.log per CLAUDE.md output rules."""
     csv_path = csv_path or str(HERE / "data" / "XAUUSD_M5.csv")
+    # Per-run output folder so reports never overwrite each other.
+    # Name: report/run_YYYYMMDD-HHMMSS_<symbol-guess>/
+    run_stamp = time.strftime("%Y%m%d-%H%M%S")
+    symbol_tag = Path(csv_path).stem.split("_")[0].upper() or "RUN"
+    run_dir = HERE / "report" / f"run_{run_stamp}_{symbol_tag}"
+    run_dir.mkdir(parents=True, exist_ok=True)
     log_lines: list[str] = []
-    log_path = HERE / "report" / "run.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path = run_dir / "run.log"
 
     def log(msg: str):
         # silent — do NOT print to stdout; CLAUDE.md says JSON only on stdout.
@@ -284,7 +289,7 @@ def main(csv_path: str | None = None, account: float = 10_000.0, risk_pct: float
             "winner": None,
             "elapsed_sec": round(time.time() - t0, 1),
         }
-        out_dir = HERE / "report"
+        out_dir = run_dir
         # also write a no-edge HTML for each candidate so user can inspect
         for r in results:
             try:
@@ -353,6 +358,7 @@ def main(csv_path: str | None = None, account: float = 10_000.0, risk_pct: float
             "is_metrics": winner["is_metrics"], "oos_metrics": winner["oos_metrics"],
             "wf": winner["wf"], "mc": winner["mc"], "regime": winner["regime"],
         },
+        "run_dir":            str(run_dir),
         "html_report":        html_path,
         "pdf_report":         pdf_path,
         "pdf_status":         pdf_status,
