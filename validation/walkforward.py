@@ -24,8 +24,12 @@ def walkforward(
     engine_kwargs: dict | None = None,
     base_params: dict | None = None,
 ) -> dict:
-    engine_kwargs = engine_kwargs or {}
+    engine_kwargs = dict(engine_kwargs or {})           # copy so we can mutate
     base_params = base_params or {}
+    # IMPORTANT: pull the FULL session_mask out and slice it per-window below.
+    # Leaving it inside engine_kwargs would pass the full mask to a window-sized
+    # df → the engine's positional .iloc lookup would read the WRONG bars.
+    full_mask = engine_kwargs.pop("session_mask", None)
     n = len(df)
     win_size = n // n_windows
     results = []
@@ -39,12 +43,16 @@ def walkforward(
         cut = int(len(win) * is_ratio)
         is_df = win.iloc[:cut]
         oos_df = win.iloc[cut:]
+        # slice the session mask to match each segment exactly
+        is_mask  = full_mask.iloc[start:start + cut] if full_mask is not None else None
+        oos_mask = full_mask.iloc[start + cut:end]   if full_mask is not None else None
 
         # ---- optimise on IS
-        def eval_fn(params):
+        def eval_fn(params, _is_df=is_df, _is_mask=is_mask):
             p = {**base_params, **params}
             strat = strategy_cls(params=p)
-            res = BacktestEngine(df=is_df, strategy=strat, **engine_kwargs).run()
+            res = BacktestEngine(df=_is_df, strategy=strat,
+                                 session_mask=_is_mask, **engine_kwargs).run()
             if len(res.trades) < 20:
                 return -1.0
             m = summary(res.trade_pnls, res.equity, res.initial_balance)
@@ -55,10 +63,13 @@ def walkforward(
         out = opt.run()
         best_params = {**base_params, **out["best_params"]}
 
-        # ---- test on OOS with those params
+        # ---- test on OOS with those params (bar-equity for accurate metrics)
         strat = strategy_cls(params=best_params)
-        res = BacktestEngine(df=oos_df, strategy=strat, **engine_kwargs).run()
-        oos_m = summary(res.trade_pnls, res.equity, res.initial_balance) if len(res.trades) else None
+        res = BacktestEngine(df=oos_df, strategy=strat,
+                             session_mask=oos_mask, **engine_kwargs).run()
+        oos_m = (summary(res.trade_pnls, res.equity, res.initial_balance,
+                         bar_equity=res.bar_equity, bar_equity_index=res.bar_equity_index)
+                 if len(res.trades) else None)
 
         results.append({
             "window": w + 1,

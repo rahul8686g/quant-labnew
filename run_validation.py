@@ -21,14 +21,17 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+import pandas as pd
+
 from tools.data_loader import load_mt5_csv, quality_check, resample
 from tools.time_utils import in_any_session
 from tools.metrics import summary
 from backtest_engine import BacktestEngine
-from skills import TrendStrategy, MeanRevStrategy, BreakoutStrategy
+from skills import (TrendStrategy, MeanRevStrategy, BreakoutStrategy,
+                    MomentumStrategy, PullbackStrategy)
 from optimization import GeneticOptimizer, ParamSpec
 from validation import walkforward, monte_carlo, regime_split
-from report import write_html_report, export_mq5
+from report import write_html_report, export_mq5, export_pine, html_to_pdf
 
 
 # ----------------------------------------------------------- candidate matrix
@@ -66,6 +69,28 @@ CANDIDATES = [
             ParamSpec("atr_tp_mult", 1.5, 4.0, "float"),
         ],
     },
+    {
+        "name":   "momentum_v1",
+        "cls":    MomentumStrategy,
+        "family": "momentum",
+        "specs":  [
+            ParamSpec("roc_period",    5, 20, "int"),
+            ParamSpec("roc_threshold", 0.2, 1.5, "float"),
+            ParamSpec("rsi_strength",  50, 65, "float"),
+            ParamSpec("atr_sl_mult",   1.2, 2.5, "float"),
+        ],
+    },
+    {
+        "name":   "pullback_v1",
+        "cls":    PullbackStrategy,
+        "family": "pullback",
+        "specs":  [
+            ParamSpec("rsi_pullback_max", 45, 60, "float"),
+            ParamSpec("rsi_pullback_min", 40, 55, "float"),
+            ParamSpec("max_dist_atr",     0.2, 1.0, "float"),
+            ParamSpec("atr_sl_mult",      1.0, 2.5, "float"),
+        ],
+    },
 ]
 
 
@@ -94,15 +119,26 @@ def acceptance_gate(metrics_oos: dict, wf: dict, mc: dict, regime: dict | None =
         reasons.append(f"OOS DD {metrics_oos['max_dd_pct']}% >= 15%")
     if metrics_oos["trades"] < 100:
         reasons.append(f"OOS trades {metrics_oos['trades']} < 100")
-    if is_metrics and is_metrics["net_profit"] > 0 and metrics_oos["net_profit"] > 0:
-        ratio = is_metrics["net_profit"] / metrics_oos["net_profit"]
-        if ratio > 2.5:
-            reasons.append(f"IS/OOS profit ratio {ratio:.2f} > 2.5 (overfit)")
+    # ---- overfit guards (two-level) ----
+    if is_metrics:
+        is_p  = is_metrics.get("net_profit", 0.0)
+        oos_p = metrics_oos.get("net_profit", 0.0)
+        # (a) Classic overfit: IS makes money, OOS loses money.
+        #     Hard fail regardless of other gates. The ratio check below
+        #     only fires when both are profitable, so this branch is required.
+        if is_p > 0 and oos_p <= 0:
+            reasons.append(
+                f"OVERFIT: IS profitable (+${is_p:.2f}) but OOS losing (${oos_p:.2f})")
+        # (b) Soft overfit: both profitable but IS dwarfs OOS.
+        elif is_p > 0 and oos_p > 0:
+            ratio = is_p / oos_p
+            if ratio > 2.5:
+                reasons.append(f"IS/OOS profit ratio {ratio:.2f} > 2.5 (overfit)")
     return len(reasons) == 0, reasons
 
 
 # -------------------------------------------------------------- pipeline
-def evaluate_candidate(cand: dict, df_full: pd.DataFrame, session_mask, log) -> dict:  # type: ignore[name-defined]
+def evaluate_candidate(cand: dict, df_full: pd.DataFrame, session_mask, log) -> dict:
     name = cand["name"]
     cls  = cand["cls"]
     specs = cand["specs"]
@@ -122,26 +158,28 @@ def evaluate_candidate(cand: dict, df_full: pd.DataFrame, session_mask, log) -> 
         m = summary(res.trade_pnls, res.equity, res.initial_balance)
         return m["profit_factor"] * (1 + m["sharpe"] / 10) * max(0.1, 1 - m["max_dd_pct"] / 100)
 
-    log(f"  Optimising on IS ({len(is_df):,} bars, pop=10, gens=8) ...")
-    opt = GeneticOptimizer(specs, eval_fn, population=10, generations=8, seed=42)
+    log(f"  Optimising on IS ({len(is_df):,} bars, pop=20, gens=15) ...")
+    opt = GeneticOptimizer(specs, eval_fn, population=20, generations=15, seed=42)
     out = opt.run()
     best = out["best_params"]
     log(f"  Best IS fitness: {out['best_score']:.3f}  params: { {k: round(v,3) if isinstance(v,float) else v for k,v in best.items()} }")
 
-    # ---- 2. IS metrics with best params
+    # ---- 2. IS metrics with best params (bar-equity for accurate DD + daily Sharpe)
     is_res = BacktestEngine(df=is_df, strategy=cls(params=best), session_mask=is_mask, **ekw).run()
-    is_m = summary(is_res.trade_pnls, is_res.equity, is_res.initial_balance)
+    is_m = summary(is_res.trade_pnls, is_res.equity, is_res.initial_balance,
+                   bar_equity=is_res.bar_equity, bar_equity_index=is_res.bar_equity_index)
     log(f"  IS:  profit=${is_m['net_profit']}  pf={is_m['profit_factor']}  dd={is_m['max_dd_pct']}%  trades={is_m['trades']}")
 
-    # ---- 3. OOS test
+    # ---- 3. OOS test (bar-equity for accurate DD + daily Sharpe)
     oos_res = BacktestEngine(df=oos_df, strategy=cls(params=best), session_mask=oos_mask, **ekw).run()
-    oos_m = summary(oos_res.trade_pnls, oos_res.equity, oos_res.initial_balance)
+    oos_m = summary(oos_res.trade_pnls, oos_res.equity, oos_res.initial_balance,
+                    bar_equity=oos_res.bar_equity, bar_equity_index=oos_res.bar_equity_index)
     log(f"  OOS: profit=${oos_m['net_profit']}  pf={oos_m['profit_factor']}  dd={oos_m['max_dd_pct']}%  trades={oos_m['trades']}")
 
     # ---- 4. walk-forward (5 windows on full data)
     log("  Walk-forward (5 windows) ...")
     def opt_factory(sp, ef):
-        return GeneticOptimizer(sp, ef, population=10, generations=6, seed=42)
+        return GeneticOptimizer(sp, ef, population=12, generations=8, seed=42)
     wf = walkforward(df_full, cls, opt_factory, specs, n_windows=5, is_ratio=0.7,
                      engine_kwargs={**ekw, "session_mask": session_mask}, base_params=best)
     log(f"  WF: profitable {wf['profitable_windows']}/{wf['n_windows']}  medianPF={wf['median_oos_pf']:.2f}")
@@ -173,13 +211,15 @@ def evaluate_candidate(cand: dict, df_full: pd.DataFrame, session_mask, log) -> 
 
 # ----------------------------------------------------------- main
 def main(csv_path: str | None = None, account: float = 10_000.0, risk_pct: float = 0.5):
-    import pandas as pd  # ensure available in evaluate_candidate scope
-    globals()["pd"] = pd
-
+    """Run the full validation pipeline. Prints ONLY the final JSON to stdout.
+    All progress logs go to report/run.log per CLAUDE.md output rules."""
     csv_path = csv_path or str(HERE / "data" / "XAUUSD_M5.csv")
     log_lines: list[str] = []
+    log_path = HERE / "report" / "run.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
     def log(msg: str):
-        print(msg)
+        # silent — do NOT print to stdout; CLAUDE.md says JSON only on stdout.
         log_lines.append(msg)
 
     t0 = time.time()
@@ -190,6 +230,7 @@ def main(csv_path: str | None = None, account: float = 10_000.0, risk_pct: float
     q = quality_check(df_m5)
     log(f"# data {q['rows']:,} rows  usable={q['usable_pct']}%  range={q['range']}")
     if q["usable_pct"] < 95:
+        log_path.write_text("\n".join(log_lines), encoding="utf-8")
         print(json.dumps({"verdict": "REJECTED_DATA_QUALITY", "data_report": q}, indent=2))
         return
 
@@ -234,6 +275,7 @@ def main(csv_path: str | None = None, account: float = 10_000.0, risk_pct: float
                 )
             except Exception as e:
                 log(f"  report fail for {r['name']}: {e}")
+        log_path.write_text("\n".join(log_lines), encoding="utf-8")
         print(json.dumps(verdict, indent=2, default=str))
         return verdict
 
@@ -246,13 +288,31 @@ def main(csv_path: str | None = None, account: float = 10_000.0, risk_pct: float
         bars=len(df_m15), metrics=winner["oos_metrics"], equity=winner["oos_equity"],
         mc=winner["mc"], wf=winner["wf"], regime=winner["regime"],
     )
-    mq5_path = None
-    if winner["family"] == "trend":
+    # PDF (best-effort — Edge/Chrome headless)
+    pdf_path = html_to_pdf(html_path, out_dir / f"validated_{winner['name']}.pdf")
+    pdf_status = "ok" if pdf_path else "no_browser_found"
+    # Always try to export both MT5 (.mq5) and TradingView (.pine)
+    mq5_path, mq5_status = None, "ok"
+    try:
         mq5_path = export_mq5(
             out_dir / f"validated_{winner['name']}.mq5",
             name=winner["name"], symbol="XAUUSD", timeframe="M15",
-            params=winner["best_params"], family="trend",
+            params=winner["best_params"], family=winner["family"],
         )
+    except (ValueError, NotImplementedError) as e:
+        mq5_status = f"not_supported: {e}"
+        log(f"  mq5 export skipped: {e}")
+
+    pine_path, pine_status = None, "ok"
+    try:
+        pine_path = export_pine(
+            out_dir / f"validated_{winner['name']}.pine",
+            name=winner["name"], symbol="XAUUSD", timeframe="M15",
+            params=winner["best_params"], family=winner["family"],
+        )
+    except (ValueError, NotImplementedError) as e:
+        pine_status = f"not_supported: {e}"
+        log(f"  pine export skipped: {e}")
 
     verdict = {
         "verdict": "VALIDATED",
@@ -272,10 +332,17 @@ def main(csv_path: str | None = None, account: float = 10_000.0, risk_pct: float
             "is_metrics": winner["is_metrics"], "oos_metrics": winner["oos_metrics"],
             "wf": winner["wf"], "mc": winner["mc"], "regime": winner["regime"],
         },
-        "html_report": html_path,
-        "mq5_file":    mq5_path,
-        "elapsed_sec": round(time.time() - t0, 1),
+        "html_report":        html_path,
+        "pdf_report":         pdf_path,
+        "pdf_status":         pdf_status,
+        "mq5_file":           mq5_path,
+        "mq5_export_status":  mq5_status,
+        "pine_file":          pine_path,
+        "pine_export_status": pine_status,
+        "log_file":           str(log_path),
+        "elapsed_sec":        round(time.time() - t0, 1),
     }
+    log_path.write_text("\n".join(log_lines), encoding="utf-8")
     print(json.dumps(verdict, indent=2, default=str))
     return verdict
 

@@ -51,15 +51,41 @@ def sortino_ratio(returns: np.ndarray | list, periods_per_year: int = 252) -> fl
     return float((r.mean() / downside.std()) * np.sqrt(periods_per_year))
 
 
-def summary(trades_pnl: np.ndarray | list, equity: np.ndarray | list,
-            initial_balance: float = 10_000.0) -> dict:
-    """One-shot summary dict for reports / JSON output."""
+def summary(trades_pnl: np.ndarray | list,
+            equity: np.ndarray | list,
+            initial_balance: float = 10_000.0,
+            bar_equity: np.ndarray | list | None = None,
+            bar_equity_index: list | None = None) -> dict:
+    """One-shot summary dict for reports / JSON output.
+
+    If bar_equity (per-bar mark-to-market) + bar_equity_index (datetimes) are
+    provided, drawdown and Sharpe are computed from those — much more accurate.
+    Sharpe is then properly annualised on daily-resampled returns.
+    Otherwise falls back to per-trade-close equity (legacy behaviour).
+    """
     pnls = np.asarray(trades_pnl, dtype=float)
-    eq = np.asarray(equity, dtype=float)
+    eq_trade = np.asarray(equity, dtype=float)
     net = float(pnls.sum())
-    dd_abs, dd_pct = max_drawdown(eq)
-    # equity-bar returns for Sharpe
-    rets = np.diff(eq) / eq[:-1] if len(eq) > 1 else np.array([0.0])
+
+    use_bar = bar_equity is not None and bar_equity_index is not None and len(bar_equity) > 1
+    if use_bar:
+        eq_bar = np.asarray(bar_equity, dtype=float)
+        dd_abs, dd_pct = max_drawdown(eq_bar)
+        # daily-resampled returns → proper Sharpe annualisation
+        s = pd.Series(eq_bar, index=pd.DatetimeIndex(bar_equity_index))
+        daily = s.resample("D").last().dropna()
+        d_rets = daily.pct_change().dropna().to_numpy()
+        sharpe = sharpe_ratio(d_rets, periods_per_year=252)
+        sortino = sortino_ratio(d_rets, periods_per_year=252)
+        final_eq = float(eq_bar[-1])
+    else:
+        dd_abs, dd_pct = max_drawdown(eq_trade)
+        # legacy fallback — per-trade returns (NOT properly annualised)
+        rets = np.diff(eq_trade) / eq_trade[:-1] if len(eq_trade) > 1 else np.array([0.0])
+        sharpe = sharpe_ratio(rets)
+        sortino = sortino_ratio(rets)
+        final_eq = float(eq_trade[-1]) if len(eq_trade) else initial_balance
+
     return {
         "net_profit":    round(net, 2),
         "return_pct":    round(100.0 * net / initial_balance, 2),
@@ -69,7 +95,7 @@ def summary(trades_pnl: np.ndarray | list, equity: np.ndarray | list,
         "expectancy":    round(expectancy(pnls), 2),
         "max_dd_abs":    round(dd_abs, 2),
         "max_dd_pct":    round(dd_pct, 2),
-        "sharpe":        round(sharpe_ratio(rets), 3),
-        "sortino":       round(sortino_ratio(rets), 3),
-        "final_equity":  round(float(eq[-1]) if len(eq) else initial_balance, 2),
+        "sharpe":        round(sharpe, 3),
+        "sortino":       round(sortino, 3),
+        "final_equity":  round(final_eq, 2),
     }
