@@ -12,17 +12,48 @@ from pathlib import Path
 
 
 def load_mt5_csv(path: str | Path) -> pd.DataFrame:
-    """Load an MT5-exported tab-separated CSV.
-    Expected header: <DATE> <TIME> <OPEN> <HIGH> <LOW> <CLOSE> <TICKVOL> <VOL> <SPREAD>
-    Returns: DataFrame indexed by datetime with columns open, high, low, close, volume, spread.
+    """Load an OHLCV CSV — auto-detects MT5 vs TradingView export format.
+
+    MT5 format:         tab-separated, header `<DATE> <TIME> <OPEN> ...`
+    TradingView format: comma-separated, header `time,open,high,low,close[,Volume]`
+                        where `time` is a Unix epoch in seconds.
+
+    Both return: DataFrame indexed by datetime with cols
+                 open, high, low, close, volume, spread.
     """
-    df = pd.read_csv(path, sep="\t")
-    df.columns = [c.strip("<>").lower() for c in df.columns]
-    df["dt"] = pd.to_datetime(df["date"] + " " + df["time"], format="%Y.%m.%d %H:%M:%S")
-    df = df.set_index("dt").drop(columns=["date", "time"])
-    df = df.rename(columns={"tickvol": "volume"})
-    df = df[["open", "high", "low", "close", "volume", "spread"]]
-    return df.sort_index()
+    path = Path(path)
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        first = f.readline()
+
+    if "<DATE>" in first or "<TIME>" in first or "\t" in first:
+        # ---- MT5 tab-separated ----
+        df = pd.read_csv(path, sep="\t")
+        df.columns = [c.strip("<>").lower() for c in df.columns]
+        df["dt"] = pd.to_datetime(df["date"] + " " + df["time"], format="%Y.%m.%d %H:%M:%S")
+        df = df.set_index("dt").drop(columns=["date", "time"])
+        df = df.rename(columns={"tickvol": "volume"})
+        keep = [c for c in ["open", "high", "low", "close", "volume", "spread"] if c in df.columns]
+        df = df[keep]
+        if "volume" not in df.columns: df["volume"] = 0
+        if "spread" not in df.columns: df["spread"] = 0
+        return df.sort_index()
+
+    if "time" in first.lower() and "," in first:
+        # ---- TradingView comma-separated ----
+        df = pd.read_csv(path)
+        df.columns = [c.strip().lower() for c in df.columns]
+        if "time" not in df.columns:
+            raise ValueError(f"TradingView format expected 'time' column, got: {list(df.columns)}")
+        # Unix epoch seconds → datetime
+        df["dt"] = pd.to_datetime(df["time"], unit="s", utc=True).dt.tz_localize(None)
+        df = df.set_index("dt").drop(columns=["time"])
+        if "volume" not in df.columns: df["volume"] = 0
+        df["spread"] = 0
+        df = df[["open", "high", "low", "close", "volume", "spread"]]
+        return df.sort_index()
+
+    raise ValueError(f"Unrecognised CSV format in {path}. "
+                     f"First line: {first[:120]!r}")
 
 
 def quality_check(df: pd.DataFrame, expected_freq_min: int = 5) -> dict:

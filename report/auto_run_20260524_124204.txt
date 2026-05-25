@@ -1,0 +1,533 @@
+{
+  "verdict": "NO_EDGE",
+  "data_report": {
+    "rows": 100065,
+    "range": [
+      "2024-11-06 06:50:00",
+      "2026-04-10 16:00:00"
+    ],
+    "duplicates": 0,
+    "ohlc_violations": 0,
+    "large_gaps_gt_72h": 2,
+    "usable_pct": 100.0,
+    "source": "local_csv"
+  },
+  "candidates": [
+    {
+      "name": "trend_v1",
+      "passed": false,
+      "reasons": [
+        "WF only 0/5 windows profitable",
+        "OOS trades 69 < 100",
+        "IS/OOS profit ratio 6.11 > 2.5 (overfit)"
+      ],
+      "oos_pf": 1.344,
+      "oos_dd": 5.9,
+      "oos_trades": 69,
+      "mc_p5": 10802.13
+    },
+    {
+      "name": "meanrev_v1",
+      "passed": false,
+      "reasons": [
+        "OOS PF 0.756 <= 1.10",
+        "WF only 1/5 windows profitable",
+        "MC p5 9141.22 <= start (10000.0)",
+        "OVERFIT: IS profitable (+$28.49) but OOS losing ($-858.78)"
+      ],
+      "oos_pf": 0.756,
+      "oos_dd": 12.76,
+      "oos_trades": 118,
+      "mc_p5": 9141.22
+    },
+    {
+      "name": "breakout_v1",
+      "passed": false,
+      "reasons": [
+        "IS/OOS profit ratio 5.80 > 2.5 (overfit)"
+      ],
+      "oos_pf": 1.18,
+      "oos_dd": 8.11,
+      "oos_trades": 313,
+      "mc_p5": 11680.33
+    },
+    {
+      "name": "momentum_v1",
+      "passed": false,
+      "reasons": [
+        "IS/OOS profit ratio 3.26 > 2.5 (overfit)"
+      ],
+      "oos_pf": 1.214,
+      "oos_dd": 8.95,
+      "oos_trades": 315,
+      "mc_p5": 11980.99
+    },
+    {
+      "name": "pullback_v1",
+      "passed": false,
+      "reasons": [
+        "OOS PF 0.976 <= 1.10",
+        "WF only 2/5 windows profitable",
+        "MC p5 9910.1 <= start (10000.0)",
+        "OVERFIT: IS profitable (+$951.37) but OOS losing ($-89.90)"
+      ],
+      "oos_pf": 0.976,
+      "oos_dd": 6.03,
+      "oos_trades": 130,
+      "mc_p5": 9910.1
+    }
+  ],
+  "winner": null,
+  "elapsed_sec": 20072.7
+}
+{
+  "verdict": "VALIDATED",
+  "data_report": {
+    "rows": 100065,
+    "range": [
+      "2024-11-06 06:50:00",
+      "2026-04-10 16:00:00"
+    ],
+    "duplicates": 0,
+    "ohlc_violations": 0,
+    "large_gaps_gt_72h": 2,
+    "usable_pct": 100.0,
+    "source": "local_csv"
+  },
+  "candidates": [
+    {
+      "name": "trend_v1",
+      "passed": false,
+      "oos_pf": 0.0,
+      "oos_dd": 1.14,
+      "oos_trades": 2,
+      "mc_p5": 9928.25,
+      "reasons": [
+        "OOS PF 0.0 <= 1.10",
+        "WF only 0/5 windows profitable",
+        "MC p5 9928.25 <= start (10000.0)",
+        "OOS trades 2 < 100",
+        "OVERFIT: IS profitable (+$1412.21) but OOS losing ($-71.75)"
+      ]
+    },
+    {
+      "name": "meanrev_v1",
+      "passed": false,
+      "oos_pf": 0.76,
+      "oos_dd": 9.59,
+      "oos_trades": 68,
+      "mc_p5": 9533.39,
+      "reasons": [
+        "OOS PF 0.76 <= 1.10",
+        "WF only 1/5 windows profitable",
+        "MC p5 9533.39 <= start (10000.0)",
+        "OOS trades 68 < 100",
+        "OVERFIT: IS profitable (+$1289.40) but OOS losing ($-466.61)"
+      ]
+    },
+    {
+      "name": "breakout_v1",
+      "passed": false,
+      "oos_pf": 1.243,
+      "oos_dd": 7.5,
+      "oos_trades": 65,
+      "mc_p5": 10531.67,
+      "reasons": [
+        "OOS trades 65 < 100",
+        "IS/OOS profit ratio 3.42 > 2.5 (overfit)"
+      ]
+    },
+    {
+      "name": "momentum_v1",
+      "passed": true,
+      "oos_pf": 1.47,
+      "oos_dd": 5.73,
+      "oos_trades": 150,
+      "mc_p5": 12227.27,
+      "reasons": []
+    },
+    {
+      "name": "pullback_v1",
+      "passed": false,
+      "oos_pf": 1.037,
+      "oos_dd": 4.05,
+      "oos_trades": 48,
+      "mc_p5": 10057.28,
+      "reasons": [
+        "OOS PF 1.037 <= 1.10",
+        "OOS trades 48 < 100",
+        "IS/OOS profit ratio 5.10 > 2.5 (overfit)"
+      ]
+    }
+  ],
+  "winner": {
+    "name": "momentum_v1",
+    "family": "momentum",
+    "best_params": {
+      "roc_period": 11,
+      "roc_threshold": 1.015913828462073,
+      "rsi_strength": 59.76622424506662,
+      "atr_sl_mult": 1.9325071634932294
+    },
+    "is_metrics": {
+      "net_profit": 2611.79,
+      "return_pct": 26.12,
+      "trades": 144,
+      "win_rate": 51.39,
+      "profit_factor": 1.662,
+      "expectancy": 18.14,
+      "max_dd_abs": 447.93,
+      "max_dd_pct": 4.25,
+      "sharpe": 2.306,
+      "sortino": 3.837,
+      "final_equity": 12611.79
+    },
+    "oos_metrics": {
+      "net_profit": 2227.27,
+      "return_pct": 22.27,
+      "trades": 150,
+      "win_rate": 49.33,
+      "profit_factor": 1.47,
+      "expectancy": 14.85,
+      "max_dd_abs": 673.01,
+      "max_dd_pct": 5.73,
+      "sharpe": 2.674,
+      "sortino": 5.377,
+      "final_equity": 12227.27
+    },
+    "wf": {
+      "profitable_windows": 5,
+      "n_windows": 5,
+      "median_oos_pf": 1.918,
+      "passed": true
+    },
+    "mc": {
+      "n_runs": 1000,
+      "p5_equity": 12227.27,
+      "p50_equity": 12227.27,
+      "p95_equity": 12227.27,
+      "p5_dd_pct": 3.39,
+      "p50_dd_pct": 5.03,
+      "p95_dd_pct": 8.04,
+      "prob_profitable": 1.0,
+      "passed": true
+    },
+    "regime": {
+      "per_regime": {
+        "uptrend": {
+          "trades": 55,
+          "net": 744.5,
+          "win_rate": 49.09,
+          "profitable": true
+        },
+        "downtrend": {
+          "trades": 36,
+          "net": 1128.74,
+          "win_rate": 58.33,
+          "profitable": true
+        },
+        "range": {
+          "trades": 59,
+          "net": 354.04,
+          "win_rate": 44.07,
+          "profitable": true
+        }
+      },
+      "profitable_regimes": 3,
+      "balanced": true
+    }
+  },
+  "run_dir": "C:\\Users\\USER\\Desktop\\mt5-pro\\quant-lab\\report\\run_20260524-181641_XAUUSD",
+  "html_report": "C:\\Users\\USER\\Desktop\\mt5-pro\\quant-lab\\report\\validated_momentum_v1.html",
+  "pdf_report": "C:\\Users\\USER\\Desktop\\mt5-pro\\quant-lab\\report\\validated_momentum_v1.pdf",
+  "pdf_status": "ok",
+  "mq5_file": null,
+  "mq5_export_status": "not_supported: unknown strategy family 'momentum' \u2014 supported: trend, meanrev, breakout",
+  "pine_file": "C:\\Users\\USER\\Desktop\\mt5-pro\\quant-lab\\report\\validated_momentum_v1.pine",
+  "pine_export_status": "ok",
+  "log_file": "C:\\Users\\USER\\Desktop\\mt5-pro\\quant-lab\\report\\run_20260524-181641_XAUUSD\\run.log",
+  "elapsed_sec": 2286.8
+}
+{
+  "final_verdict": "VALIDATED",
+  "attempts_run": 2,
+  "attempts": [
+    {
+      "attempt": 1,
+      "refinement": "baseline (user-provided INFO)",
+      "config": {
+        "csv_path": "data/XAUUSD_M5.csv"
+      },
+      "verdict": "NO_EDGE",
+      "winner": null,
+      "summary": [
+        {
+          "name": "trend_v1",
+          "passed": false,
+          "oos_pf": 1.344,
+          "reasons": [
+            "WF only 0/5 windows profitable",
+            "OOS trades 69 < 100",
+            "IS/OOS profit ratio 6.11 > 2.5 (overfit)"
+          ]
+        },
+        {
+          "name": "meanrev_v1",
+          "passed": false,
+          "oos_pf": 0.756,
+          "reasons": [
+            "OOS PF 0.756 <= 1.10",
+            "WF only 1/5 windows profitable",
+            "MC p5 9141.22 <= start (10000.0)",
+            "OVERFIT: IS profitable (+$28.49) but OOS losing ($-858.78)"
+          ]
+        },
+        {
+          "name": "breakout_v1",
+          "passed": false,
+          "oos_pf": 1.18,
+          "reasons": [
+            "IS/OOS profit ratio 5.80 > 2.5 (overfit)"
+          ]
+        },
+        {
+          "name": "momentum_v1",
+          "passed": false,
+          "oos_pf": 1.214,
+          "reasons": [
+            "IS/OOS profit ratio 3.26 > 2.5 (overfit)"
+          ]
+        },
+        {
+          "name": "pullback_v1",
+          "passed": false,
+          "oos_pf": 0.976,
+          "reasons": [
+            "OOS PF 0.976 <= 1.10",
+            "WF only 2/5 windows profitable",
+            "MC p5 9910.1 <= start (10000.0)",
+            "OVERFIT: IS profitable (+$951.37) but OOS losing ($-89.90)"
+          ]
+        }
+      ],
+      "run_dir": null
+    },
+    {
+      "attempt": 2,
+      "refinement": null,
+      "config": {
+        "csv_path": "data/XAUUSD_M5.csv",
+        "exec_tf": "30min"
+      },
+      "verdict": "VALIDATED",
+      "winner": {
+        "name": "momentum_v1",
+        "family": "momentum",
+        "best_params": {
+          "roc_period": 11,
+          "roc_threshold": 1.015913828462073,
+          "rsi_strength": 59.76622424506662,
+          "atr_sl_mult": 1.9325071634932294
+        },
+        "is_metrics": {
+          "net_profit": 2611.79,
+          "return_pct": 26.12,
+          "trades": 144,
+          "win_rate": 51.39,
+          "profit_factor": 1.662,
+          "expectancy": 18.14,
+          "max_dd_abs": 447.93,
+          "max_dd_pct": 4.25,
+          "sharpe": 2.306,
+          "sortino": 3.837,
+          "final_equity": 12611.79
+        },
+        "oos_metrics": {
+          "net_profit": 2227.27,
+          "return_pct": 22.27,
+          "trades": 150,
+          "win_rate": 49.33,
+          "profit_factor": 1.47,
+          "expectancy": 14.85,
+          "max_dd_abs": 673.01,
+          "max_dd_pct": 5.73,
+          "sharpe": 2.674,
+          "sortino": 5.377,
+          "final_equity": 12227.27
+        },
+        "wf": {
+          "profitable_windows": 5,
+          "n_windows": 5,
+          "median_oos_pf": 1.918,
+          "passed": true
+        },
+        "mc": {
+          "n_runs": 1000,
+          "p5_equity": 12227.27,
+          "p50_equity": 12227.27,
+          "p95_equity": 12227.27,
+          "p5_dd_pct": 3.39,
+          "p50_dd_pct": 5.03,
+          "p95_dd_pct": 8.04,
+          "prob_profitable": 1.0,
+          "passed": true
+        },
+        "regime": {
+          "per_regime": {
+            "uptrend": {
+              "trades": 55,
+              "net": 744.5,
+              "win_rate": 49.09,
+              "profitable": true
+            },
+            "downtrend": {
+              "trades": 36,
+              "net": 1128.74,
+              "win_rate": 58.33,
+              "profitable": true
+            },
+            "range": {
+              "trades": 59,
+              "net": 354.04,
+              "win_rate": 44.07,
+              "profitable": true
+            }
+          },
+          "profitable_regimes": 3,
+          "balanced": true
+        }
+      },
+      "summary": [
+        {
+          "name": "trend_v1",
+          "passed": false,
+          "oos_pf": 0.0,
+          "reasons": [
+            "OOS PF 0.0 <= 1.10",
+            "WF only 0/5 windows profitable",
+            "MC p5 9928.25 <= start (10000.0)",
+            "OOS trades 2 < 100",
+            "OVERFIT: IS profitable (+$1412.21) but OOS losing ($-71.75)"
+          ]
+        },
+        {
+          "name": "meanrev_v1",
+          "passed": false,
+          "oos_pf": 0.76,
+          "reasons": [
+            "OOS PF 0.76 <= 1.10",
+            "WF only 1/5 windows profitable",
+            "MC p5 9533.39 <= start (10000.0)",
+            "OOS trades 68 < 100",
+            "OVERFIT: IS profitable (+$1289.40) but OOS losing ($-466.61)"
+          ]
+        },
+        {
+          "name": "breakout_v1",
+          "passed": false,
+          "oos_pf": 1.243,
+          "reasons": [
+            "OOS trades 65 < 100",
+            "IS/OOS profit ratio 3.42 > 2.5 (overfit)"
+          ]
+        },
+        {
+          "name": "momentum_v1",
+          "passed": true,
+          "oos_pf": 1.47,
+          "reasons": []
+        },
+        {
+          "name": "pullback_v1",
+          "passed": false,
+          "oos_pf": 1.037,
+          "reasons": [
+            "OOS PF 1.037 <= 1.10",
+            "OOS trades 48 < 100",
+            "IS/OOS profit ratio 5.10 > 2.5 (overfit)"
+          ]
+        }
+      ],
+      "run_dir": "C:\\Users\\USER\\Desktop\\mt5-pro\\quant-lab\\report\\run_20260524-181641_XAUUSD"
+    }
+  ],
+  "winner": {
+    "name": "momentum_v1",
+    "family": "momentum",
+    "best_params": {
+      "roc_period": 11,
+      "roc_threshold": 1.015913828462073,
+      "rsi_strength": 59.76622424506662,
+      "atr_sl_mult": 1.9325071634932294
+    },
+    "is_metrics": {
+      "net_profit": 2611.79,
+      "return_pct": 26.12,
+      "trades": 144,
+      "win_rate": 51.39,
+      "profit_factor": 1.662,
+      "expectancy": 18.14,
+      "max_dd_abs": 447.93,
+      "max_dd_pct": 4.25,
+      "sharpe": 2.306,
+      "sortino": 3.837,
+      "final_equity": 12611.79
+    },
+    "oos_metrics": {
+      "net_profit": 2227.27,
+      "return_pct": 22.27,
+      "trades": 150,
+      "win_rate": 49.33,
+      "profit_factor": 1.47,
+      "expectancy": 14.85,
+      "max_dd_abs": 673.01,
+      "max_dd_pct": 5.73,
+      "sharpe": 2.674,
+      "sortino": 5.377,
+      "final_equity": 12227.27
+    },
+    "wf": {
+      "profitable_windows": 5,
+      "n_windows": 5,
+      "median_oos_pf": 1.918,
+      "passed": true
+    },
+    "mc": {
+      "n_runs": 1000,
+      "p5_equity": 12227.27,
+      "p50_equity": 12227.27,
+      "p95_equity": 12227.27,
+      "p5_dd_pct": 3.39,
+      "p50_dd_pct": 5.03,
+      "p95_dd_pct": 8.04,
+      "prob_profitable": 1.0,
+      "passed": true
+    },
+    "regime": {
+      "per_regime": {
+        "uptrend": {
+          "trades": 55,
+          "net": 744.5,
+          "win_rate": 49.09,
+          "profitable": true
+        },
+        "downtrend": {
+          "trades": 36,
+          "net": 1128.74,
+          "win_rate": 58.33,
+          "profitable": true
+        },
+        "range": {
+          "trades": 59,
+          "net": 354.04,
+          "win_rate": 44.07,
+          "profitable": true
+        }
+      },
+      "profitable_regimes": 3,
+      "balanced": true
+    }
+  },
+  "last_run_dir": "C:\\Users\\USER\\Desktop\\mt5-pro\\quant-lab\\report\\run_20260524-181641_XAUUSD",
+  "wrapper_elapsed_sec": 22359.6
+}

@@ -22,6 +22,16 @@ strategy("{name} (quant-lab)", overlay=true, initial_capital=10000,
          default_qty_type=strategy.cash, default_qty_value=10)
 
 riskPct = input.float({risk_pct}, "Risk % per trade", minval=0.05, step=0.05)
+
+// === SESSION FILTER (matches backtest exactly) ===
+// Backtest only traded during Asian + London + New York sessions.
+// Disable this if you want 24/7 trading (results will differ from backtest).
+useSession = input.bool(true, "Session filter (Asian+London+NY)")
+h = hour(time, "Etc/UTC")
+inSession = not useSession or (
+     (h >= 1 and h < 9) or       // Asian   01:00-09:00 UTC
+     (h >= 8 and h < 16) or      // London  08:00-16:00 UTC
+     (h >= 13 and h < 21))       // NewYork 13:00-21:00 UTC
 """
 
 _FOOTER_SIZING = """
@@ -73,11 +83,11 @@ shortSig = trendDir == -1 and confDir == -1 and execDir == -1 and rsiV < RsiSell
 slDist = SlMult * atrV
 tpDist = TpMult * atrV
 """ + _FOOTER_SIZING + """
-if longSig and strategy.position_size <= 0
+if longSig and inSession and strategy.position_size <= 0
     strategy.entry("L", strategy.long, qty=qty)
     strategy.exit("Lx", "L", stop=close - slDist, limit=close + tpDist)
 
-if shortSig and strategy.position_size >= 0
+if shortSig and inSession and strategy.position_size >= 0
     strategy.entry("S", strategy.short, qty=qty)
     strategy.exit("Sx", "S", stop=close + slDist, limit=close - tpDist)
 """
@@ -102,12 +112,12 @@ slDist  = SlMult * atrV
 tpDist  = TpMult * atrV
 """ + _FOOTER_SIZING + """
 // SHORT — stretched above mid + RSI overbought
-if stretch >= StretchAtr and rsiV >= RsiOver and strategy.position_size >= 0
+if stretch >= StretchAtr and rsiV >= RsiOver and inSession and strategy.position_size >= 0
     strategy.entry("S", strategy.short, qty=qty)
     strategy.exit("Sx", "S", stop=close + slDist, limit=close - tpDist)
 
 // LONG — stretched below mid + RSI oversold
-if stretch <= -StretchAtr and rsiV <= RsiUnder and strategy.position_size <= 0
+if stretch <= -StretchAtr and rsiV <= RsiUnder and inSession and strategy.position_size <= 0
     strategy.entry("L", strategy.long, qty=qty)
     strategy.exit("Lx", "L", stop=close - slDist, limit=close + tpDist)
 """
@@ -131,11 +141,11 @@ atrV = ta.atr(AtrPer)
 slDist = SlMult * atrV
 tpDist = TpMult * atrV
 """ + _FOOTER_SIZING + """
-if close > hh and adxV >= AdxMin and strategy.position_size <= 0
+if close > hh and adxV >= AdxMin and inSession and strategy.position_size <= 0
     strategy.entry("L", strategy.long, qty=qty)
     strategy.exit("Lx", "L", stop=close - slDist, limit=close + tpDist)
 
-if close < ll and adxV >= AdxMin and strategy.position_size >= 0
+if close < ll and adxV >= AdxMin and inSession and strategy.position_size >= 0
     strategy.entry("S", strategy.short, qty=qty)
     strategy.exit("Sx", "S", stop=close + slDist, limit=close - tpDist)
 """
@@ -163,11 +173,11 @@ tpDist = TpMult * atrV
 longSig  = roc >=  RocThresh and close > emaF and rsiV >= RsiStrength
 shortSig = roc <= -RocThresh and close < emaF and rsiV <= (100.0 - RsiStrength)
 
-if longSig and strategy.position_size <= 0
+if longSig and inSession and strategy.position_size <= 0
     strategy.entry("L", strategy.long, qty=qty)
     strategy.exit("Lx", "L", stop=close - slDist, limit=close + tpDist)
 
-if shortSig and strategy.position_size >= 0
+if shortSig and inSession and strategy.position_size >= 0
     strategy.entry("S", strategy.short, qty=qty)
     strategy.exit("Sx", "S", stop=close + slDist, limit=close - tpDist)
 """
@@ -195,12 +205,12 @@ slDist = SlMult * atrV
 tpDist = TpMult * atrV
 """ + _FOOTER_SIZING + """
 // UPTREND pullback long
-if close > emaL and emaT > emaL and rsiV <= RsiPullbackMax and dist <= MaxDistAtr and strategy.position_size <= 0
+if close > emaL and emaT > emaL and rsiV <= RsiPullbackMax and dist <= MaxDistAtr and inSession and strategy.position_size <= 0
     strategy.entry("L", strategy.long, qty=qty)
     strategy.exit("Lx", "L", stop=close - slDist, limit=close + tpDist)
 
 // DOWNTREND pullback short
-if close < emaL and emaT < emaL and rsiV >= RsiPullbackMin and dist <= MaxDistAtr and strategy.position_size >= 0
+if close < emaL and emaT < emaL and rsiV >= RsiPullbackMin and dist <= MaxDistAtr and inSession and strategy.position_size >= 0
     strategy.entry("S", strategy.short, qty=qty)
     strategy.exit("Sx", "S", stop=close + slDist, limit=close - tpDist)
 """
