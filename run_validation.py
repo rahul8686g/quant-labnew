@@ -200,7 +200,8 @@ def evaluate_candidate(cand: dict, df_full: pd.DataFrame, session_mask, log) -> 
         "name": name, "family": cand["family"], "best_params": best,
         "is_metrics": is_m, "oos_metrics": oos_m,
         "wf": {"profitable_windows": wf["profitable_windows"], "n_windows": wf["n_windows"],
-               "median_oos_pf": wf["median_oos_pf"], "passed": wf["passed"]},
+               "median_oos_pf": wf["median_oos_pf"], "passed": wf["passed"],
+               "windows": wf.get("windows", [])},   # include per-window breakdown
         "mc": mc, "regime": rg,
         "passed": passed, "reasons": reasons,
         "oos_equity": oos_res.equity.tolist(),
@@ -312,14 +313,36 @@ def main(csv_path: str | None = None,
             "elapsed_sec": round(time.time() - t0, 1),
         }
         out_dir = run_dir
-        # also write a no-edge HTML for each candidate so user can inspect
+        # Build full context for rejection reports (same as VALIDATED branch)
+        ds = {
+            "source": f"CSV: {Path(csv_path).name}",
+            "rows": q["rows"], "range": q["range"], "exec_tf": exec_tf,
+            "exec_bars": len(df_m15), "is_pct": 70, "oos_pct": 30,
+            "is_bars": int(len(df_m15) * 0.7),
+            "oos_bars": int(len(df_m15) * 0.3),
+            "sessions": sessions_use, "usable_pct": q["usable_pct"],
+            "duplicates": q.get("duplicates", 0),
+            "large_gaps_gt_72h": q.get("large_gaps_gt_72h", 0),
+        }
+        cands_full = [
+            {"name": x["name"], "passed": x["passed"], "reasons": x.get("reasons", []),
+             "oos_metrics": x["oos_metrics"], "wf": x["wf"], "mc": x["mc"]}
+            for x in results
+        ]
+        pipe = {"n_candidates": len(cand_list), "ga_pop_is": 20, "ga_gens_is": 15,
+                "ga_pop_wf": 12, "ga_gens_wf": 8, "wf_windows": 5, "mc_runs": 1000,
+                "attempt": 1, "refinement_reason": "baseline",
+                "elapsed_sec": round(time.time() - t0, 1)}
+        # one rejection HTML per candidate — each shows the FULL context so user
+        # can compare across candidates and see exactly why each failed.
         for r in results:
             try:
                 write_html_report(
                     out_dir / f"rejected_{r['name']}.html",
-                    title=f"REJECTED — {r['name']}", symbol="XAUUSD", period="M15",
+                    title=f"REJECTED — {r['name']}", symbol="XAUUSD", period=exec_tf,
                     bars=len(df_m15), metrics=r["oos_metrics"], equity=r["oos_equity"],
-                    mc=r["mc"], wf=None, regime=r["regime"],
+                    mc=r["mc"], wf=r["wf"], regime=r["regime"],
+                    data_summary=ds, candidates=cands_full, pipeline=pipe,
                 )
             except Exception as e:
                 log(f"  report fail for {r['name']}: {e}")
@@ -329,12 +352,45 @@ def main(csv_path: str | None = None,
 
     # winner = highest MC p5
     winner = max(survivors, key=lambda r: r["mc"]["p5_equity"])
-    out_dir = HERE / "report"
+    out_dir = run_dir
+
+    # Full context for the report — data, all candidates, pipeline config
+    data_summary = {
+        "source":           f"CSV: {Path(csv_path).name}",
+        "rows":             q["rows"],
+        "range":            q["range"],
+        "exec_tf":          exec_tf,
+        "exec_bars":        len(df_m15),
+        "is_pct": 70, "oos_pct": 30,
+        "is_bars":          int(len(df_m15) * 0.7),
+        "oos_bars":         int(len(df_m15) * 0.3),
+        "sessions":         sessions_use,
+        "usable_pct":       q["usable_pct"],
+        "duplicates":       q.get("duplicates", 0),
+        "large_gaps_gt_72h": q.get("large_gaps_gt_72h", 0),
+    }
+    candidates_full = [
+        {"name": r["name"], "passed": r["passed"], "reasons": r.get("reasons", []),
+         "oos_metrics": r["oos_metrics"], "wf": r["wf"], "mc": r["mc"]}
+        for r in results
+    ]
+    pipeline_cfg = {
+        "n_candidates":  len(cand_list),
+        "ga_pop_is":     20, "ga_gens_is": 15,
+        "ga_pop_wf":     12, "ga_gens_wf": 8,
+        "wf_windows":    5,  "mc_runs":    1000,
+        "attempt":       1,  "refinement_reason": "baseline",
+        "elapsed_sec":   round(time.time() - t0, 1),
+    }
+
     html_path = write_html_report(
         out_dir / f"validated_{winner['name']}.html",
-        title=f"VALIDATED — {winner['name']}", symbol="XAUUSD", period="M15",
+        title=f"VALIDATED — {winner['name']}", symbol="XAUUSD", period=exec_tf,
         bars=len(df_m15), metrics=winner["oos_metrics"], equity=winner["oos_equity"],
         mc=winner["mc"], wf=winner["wf"], regime=winner["regime"],
+        data_summary=data_summary,
+        candidates=candidates_full,
+        pipeline=pipeline_cfg,
     )
     # PDF (best-effort — Edge/Chrome headless)
     pdf_path = html_to_pdf(html_path, out_dir / f"validated_{winner['name']}.pdf")

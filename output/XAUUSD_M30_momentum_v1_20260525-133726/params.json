@@ -1,0 +1,30 @@
+{
+  "symbol": "XAUUSD",
+  "timeframe": "M30",
+  "strategy": "momentum_v1",
+  "family": "momentum",
+  "params": {
+    "ema_filter": 100,
+    "roc_period": 11,
+    "roc_threshold": 1.0159,
+    "rsi_period": 14,
+    "rsi_strength": 59.766,
+    "atr_period": 14,
+    "atr_sl_mult": 1.9325,
+    "atr_tp_mult": 3.0,
+    "risk_pct": 0.5
+  },
+  "metrics_oos": {
+    "net_profit": 2227.27,
+    "return_pct": 22.27,
+    "profit_factor": 1.47,
+    "max_dd_pct": 5.73,
+    "win_rate": 50.0,
+    "trades": 150,
+    "sharpe": 1.92,
+    "sortino": 4.2,
+    "expectancy": 14.85,
+    "final_equity": 12227.27
+  },
+  "generated": "20260525-133726"
+}

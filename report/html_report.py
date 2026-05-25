@@ -171,6 +171,83 @@ def _regime_panel(rg: dict | None) -> str:
 </div>"""
 
 
+def _data_panel(data_summary: dict | None) -> str:
+    if not data_summary: return ""
+    d = data_summary
+    return f"""<div class="panel"><h3 style="margin-bottom:8px;">Data Used</h3>
+<table>
+<tr><th>Source</th><td>{d.get('source', 'primary CSV')}</td></tr>
+<tr><th>Bars (rows)</th><td>{d.get('rows', '—'):,}</td></tr>
+<tr><th>Date range</th><td>{d.get('range', ['—', '—'])[0]} → {d.get('range', ['—', '—'])[1]}</td></tr>
+<tr><th>Resampled to</th><td>{d.get('exec_tf', '—')} ({d.get('exec_bars', '—'):,} bars after resample)</td></tr>
+<tr><th>IS / OOS split</th><td>{d.get('is_pct', 70)}% / {d.get('oos_pct', 30)}% — IS {d.get('is_bars', '—'):,} bars, OOS {d.get('oos_bars', '—'):,} bars</td></tr>
+<tr><th>Sessions used</th><td>{', '.join(d.get('sessions', [])) or '—'}</td></tr>
+<tr><th>Data quality</th><td>{d.get('usable_pct', 100)}% usable · {d.get('duplicates', 0)} duplicates · {d.get('large_gaps_gt_72h', 0)} large gaps</td></tr>
+</table></div>"""
+
+
+def _candidates_panel(candidates: list | None) -> str:
+    if not candidates: return ""
+    rows = ("<tr><th>#</th><th>Strategy</th><th>OOS Profit</th><th>OOS PF</th>"
+            "<th>OOS DD</th><th>OOS Trades</th><th>WF</th><th>MC p5</th><th>Status</th><th>Why failed</th></tr>")
+    for i, c in enumerate(candidates, 1):
+        oos = c.get("oos_metrics", {}) or {}
+        wf = c.get("wf", {}) or {}
+        mc = c.get("mc", {}) or {}
+        ok = c.get("passed", False)
+        status = '<span class="green">PASS</span>' if ok else '<span class="red">FAIL</span>'
+        reasons = "; ".join(c.get("reasons", [])) or "—"
+        rows += (f"<tr><td>{i}</td><td><b>{c.get('name', '?')}</b></td>"
+                 f"<td>${oos.get('net_profit', '—')}</td>"
+                 f"<td>{oos.get('profit_factor', '—')}</td>"
+                 f"<td>{oos.get('max_dd_pct', '—')}%</td>"
+                 f"<td>{oos.get('trades', '—')}</td>"
+                 f"<td>{wf.get('profitable_windows', '—')}/{wf.get('n_windows', '—')}</td>"
+                 f"<td>${mc.get('p5_equity', '—')}</td>"
+                 f"<td>{status}</td>"
+                 f"<td style='font-size:11px;color:#7c828e;'>{reasons}</td></tr>")
+    return f"""<div class="panel"><h3 style="margin-bottom:8px;">All Candidates Evaluated ({len(candidates)})</h3>
+<table>{rows}</table>
+<div style="margin-top:10px;font-size:12px;color:#7c828e;">Every candidate must pass ALL gates: OOS PF&gt;1.10, WF&ge;3/5, MC p5&gt;start, OOS DD&lt;15%, OOS trades&ge;100, IS/OOS&lt;2.5x, no IS+/OOS-.</div></div>"""
+
+
+def _cross_source_panel(cross: dict | None) -> str:
+    if not cross: return ""
+    if not cross.get("available"):
+        return f"""<div class="panel"><h3 style="margin-bottom:8px;">Cross-Source Verification</h3>
+<div style="font-size:13px;color:#7c828e;">Cross-source check unavailable — {cross.get('error', 'no alternate data source')}.<br>
+<b style="color:#ef5b54;">Demo-forward-test on YOUR live broker is MANDATORY before risking capital.</b></div></div>"""
+    m = cross.get("metrics", {}) or {}
+    badge = ('<span class="green">PASSED</span>' if cross.get("passed")
+             else '<span class="red">FAILED</span>')
+    return f"""<div class="panel"><h3 style="margin-bottom:8px;">Cross-Source Verification ({cross.get('source','?')})</h3>
+<div style="margin-bottom:8px;font-size:12px;color:#7c828e;">{cross.get('gate_used', '')}</div>
+<table>
+<tr><th>Metric</th><th>Primary</th><th>Cross-source ({cross.get('source','?')})</th></tr>
+<tr><td>Profit factor</td><td>—</td><td>{m.get('profit_factor', '—')}</td></tr>
+<tr><td>Net profit</td><td>—</td><td>${m.get('net_profit', '—')}</td></tr>
+<tr><td>Max drawdown</td><td>—</td><td>{m.get('max_dd_pct', '—')}%</td></tr>
+<tr><td>Trades</td><td>—</td><td>{m.get('trades', '—')} ({cross.get('bars','?')} bars)</td></tr>
+<tr><td>Verdict</td><td>—</td><td>{badge}</td></tr>
+</table></div>"""
+
+
+def _pipeline_panel(pipeline: dict | None) -> str:
+    if not pipeline: return ""
+    p = pipeline
+    return f"""<div class="panel"><h3 style="margin-bottom:8px;">Pipeline Configuration</h3>
+<table>
+<tr><th>Candidates evaluated</th><td>{p.get('n_candidates', '—')}</td></tr>
+<tr><th>GA population × generations (IS)</th><td>{p.get('ga_pop_is', '—')} × {p.get('ga_gens_is', '—')} = {p.get('ga_pop_is', 0) * p.get('ga_gens_is', 0)} backtests/candidate</td></tr>
+<tr><th>GA pop × gens (WF)</th><td>{p.get('ga_pop_wf', '—')} × {p.get('ga_gens_wf', '—')} × 5 windows</td></tr>
+<tr><th>Walk-forward windows</th><td>{p.get('wf_windows', 5)}</td></tr>
+<tr><th>Monte Carlo runs</th><td>{p.get('mc_runs', 1000)}</td></tr>
+<tr><th>Auto-refine attempts</th><td>{p.get('attempt', 1)} of max 3</td></tr>
+<tr><th>Refinement reason (this attempt)</th><td>{p.get('refinement_reason', '—')}</td></tr>
+<tr><th>Elapsed (this attempt)</th><td>{p.get('elapsed_sec', '—')} sec</td></tr>
+</table></div>"""
+
+
 def write_html_report(
     out_path: str | Path,
     title: str,
@@ -182,10 +259,28 @@ def write_html_report(
     mc: dict | None = None,
     wf: dict | None = None,
     regime: dict | None = None,
+    data_summary: dict | None = None,
+    candidates: list | None = None,
+    cross_source: dict | None = None,
+    pipeline: dict | None = None,
 ) -> str:
+    """Render the validation HTML report with all available context.
+    All optional panels (data_summary, candidates, cross_source, pipeline,
+    mc, wf, regime) render only when their data is provided — no empty boxes.
+    """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     profit_class = "green" if metrics.get("net_profit", 0) > 0 else "red"
+
+    # Combine optional panels — they render in this order at the bottom
+    extra_panels = (_data_panel(data_summary)
+                    + _candidates_panel(candidates)
+                    + _mc_panel(mc)
+                    + _wf_panel(wf)
+                    + _regime_panel(regime)
+                    + _cross_source_panel(cross_source)
+                    + _pipeline_panel(pipeline))
+
     html = _TEMPLATE.format(
         title=title, symbol=symbol, period=period, bars=bars,
         trades_n=metrics.get("trades", 0),
@@ -197,9 +292,9 @@ def write_html_report(
         sharpe=metrics.get("sharpe", 0),
         profit_class=profit_class,
         rows=_table_rows(metrics),
-        mc_panel=_mc_panel(mc),
-        wf_panel=_wf_panel(wf),
-        regime_panel=_regime_panel(regime),
+        mc_panel="",        # render via extra_panels instead
+        wf_panel=extra_panels,
+        regime_panel="",
         equity_js=json.dumps([round(float(x), 2) for x in equity]),
     )
     out_path.write_text(html, encoding="utf-8")
