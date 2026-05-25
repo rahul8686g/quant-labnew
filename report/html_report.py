@@ -18,7 +18,14 @@ h1 span{{background:linear-gradient(110deg,#e8b949,#f3d488);-webkit-background-c
 .kpi .l{{font-size:11px;color:#7c828e;letter-spacing:1px;text-transform:uppercase;margin-top:5px;}}
 .panel{{background:#141a24;border:1px solid #232a36;border-radius:14px;padding:22px;margin-bottom:18px;}}
 .green{{color:#4ec77f;}} .red{{color:#ef5b54;}} .gold{{color:#e8b949;}}
-canvas{{width:100%;height:380px;display:block;}}
+canvas{{width:100%;height:460px;display:block;border-radius:8px;}}
+.chart-shell{{position:relative;}}
+.chart-stats{{position:absolute;top:14px;right:18px;display:flex;gap:18px;background:rgba(15,20,28,.85);
+padding:10px 18px;border-radius:10px;border:1px solid #2a3240;backdrop-filter:blur(8px);z-index:2;}}
+.chart-stats div{{text-align:right;}}
+.chart-stats .lbl{{font-size:10px;color:#7c828e;text-transform:uppercase;letter-spacing:1px;}}
+.chart-stats .val{{font-size:18px;font-weight:800;font-family:Consolas,monospace;letter-spacing:-.3px;}}
+.chart-stats .green{{color:#3df58c;}} .chart-stats .red{{color:#ff5a52;}}
 table{{width:100%;border-collapse:collapse;font-size:13px;}}
 th,td{{padding:9px 11px;text-align:left;border-bottom:1px solid #232a36;}}
 th{{color:#7c828e;text-transform:uppercase;font-size:11px;letter-spacing:.5px;}}
@@ -37,8 +44,16 @@ th{{color:#7c828e;text-transform:uppercase;font-size:11px;letter-spacing:.5px;}}
 </div>
 
 <div class="panel">
-  <h3 style="margin-bottom:8px;">Equity Curve &amp; Drawdown</h3>
-  <canvas id="ec"></canvas>
+  <h3 style="margin-bottom:14px;">Equity Curve &amp; Drawdown</h3>
+  <div class="chart-shell">
+    <div class="chart-stats">
+      <div><div class="lbl">Return</div><div class="val {profit_class}">{return_pct}%</div></div>
+      <div><div class="lbl">Net P/L</div><div class="val {profit_class}">${net_profit}</div></div>
+      <div><div class="lbl">Max DD</div><div class="val">{max_dd_pct}%</div></div>
+      <div><div class="lbl">Trades</div><div class="val">{trades_n}</div></div>
+    </div>
+    <canvas id="ec"></canvas>
+  </div>
 </div>
 
 <div class="panel">
@@ -54,57 +69,108 @@ th{{color:#7c828e;text-transform:uppercase;font-size:11px;letter-spacing:.5px;}}
 
 <script>
 const EQ={equity_js};
-const cv=document.getElementById('ec');const dpr=window.devicePixelRatio||1;
-function draw(){{
+const cv=document.getElementById('ec');
+let _progress=0;
+function draw(p){{
+  const dpr=window.devicePixelRatio||1;
   const W=cv.clientWidth,H=cv.clientHeight;cv.width=W*dpr;cv.height=H*dpr;
   const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,W,H);
-  const padL=58,padR=14,padT=12,padB=22;
-  const eqH=(H-padT-padB)*0.65;const ddTop=padT+eqH+22;const ddH=H-padB-ddTop;
-  const n=EQ.length;const lo=Math.min(...EQ)-50,hi=Math.max(...EQ)+50;
+  const padL=70,padR=22,padT=22,padB=46;
+  const eqH=(H-padT-padB)*0.72,ddGap=18;
+  const ddTop=padT+eqH+ddGap,ddH=(H-padB)-ddTop;
+  const n=EQ.length;
+  const lo=Math.min.apply(null,EQ),hi=Math.max.apply(null,EQ);
+  const pad=(hi-lo)*0.08,yLo=lo-pad,yHi=hi+pad;
+  const START=EQ[0];
+  let peakI=0,troughI=0,_mddI=0,_curPk=EQ[0],_mxd=0;
+  for(let i=0;i<n;i++){{
+    if(EQ[i]===hi)peakI=i; if(EQ[i]===lo)troughI=i;
+    if(EQ[i]>_curPk)_curPk=EQ[i];
+    const d=(_curPk-EQ[i])/_curPk; if(d>_mxd){{_mxd=d;_mddI=i;}}
+  }}
   const xAt=i=>padL+(W-padL-padR)*(i/(n-1));
-  const yEq=v=>padT+eqH-(v-lo)/(hi-lo)*eqH;
-  let peak=EQ[0],dd=[],maxdd=0;
-  for(const b of EQ){{if(b>peak)peak=b;const d=(peak-b)/peak*100;dd.push(d);if(d>maxdd)maxdd=d;}}
-  const ddScale=Math.max(maxdd,1)*1.15;
+  const yEq=v=>padT+eqH-(v-yLo)/(yHi-yLo)*eqH;
+  let pk=EQ[0],dd=[],maxdd=0;
+  for(const b of EQ){{if(b>pk)pk=b;const d=(pk-b)/pk*100;dd.push(d);if(d>maxdd)maxdd=d;}}
+  const ddScale=Math.max(maxdd,0.5)*1.2;
   const yDd=v=>ddTop+(v/ddScale)*ddH;
+  const last=Math.max(2,Math.floor(n*p));
   // grid
-  ctx.strokeStyle='rgba(255,255,255,.05)';ctx.font='10px Consolas';ctx.fillStyle='#7c828e';ctx.textAlign='right';
-  for(let g=0;g<=4;g++){{const val=lo+(hi-lo)*g/4;const yy=yEq(val);ctx.beginPath();ctx.moveTo(padL,yy);ctx.lineTo(W-padR,yy);ctx.stroke();ctx.fillText('$'+Math.round(val),padL-6,yy+3);}}
-  // ---- NEON equity: green when profitable, red when in loss ----
-  const START=EQ[0];const NG='#39ff14';const NR='#ff3030';
-  // GREEN fill above start
-  ctx.save();ctx.beginPath();ctx.rect(padL,padT-1,W-padL-padR,Math.max(0,yEq(START)-padT)+1);ctx.clip();
-  const grG=ctx.createLinearGradient(0,padT,0,yEq(START));grG.addColorStop(0,'rgba(57,255,20,.38)');grG.addColorStop(1,'rgba(57,255,20,0)');
-  ctx.beginPath();ctx.moveTo(xAt(0),yEq(EQ[0]));for(let i=1;i<n;i++)ctx.lineTo(xAt(i),yEq(EQ[i]));ctx.lineTo(xAt(n-1),padT+eqH);ctx.lineTo(xAt(0),padT+eqH);ctx.closePath();ctx.fillStyle=grG;ctx.fill();ctx.restore();
-  // RED fill below start
-  ctx.save();ctx.beginPath();ctx.rect(padL,yEq(START),W-padL-padR,Math.max(0,padT+eqH-yEq(START))+1);ctx.clip();
-  const grR=ctx.createLinearGradient(0,yEq(START),0,padT+eqH);grR.addColorStop(0,'rgba(255,48,48,0)');grR.addColorStop(1,'rgba(255,48,48,.38)');
-  ctx.beginPath();ctx.moveTo(xAt(0),yEq(EQ[0]));for(let i=1;i<n;i++)ctx.lineTo(xAt(i),yEq(EQ[i]));ctx.lineTo(xAt(n-1),padT+eqH);ctx.lineTo(xAt(0),padT+eqH);ctx.closePath();ctx.fillStyle=grR;ctx.fill();ctx.restore();
-  // dashed start-balance reference line
-  ctx.setLineDash([4,4]);ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=1;
+  ctx.font='11px -apple-system,Segoe UI,sans-serif';ctx.fillStyle='#5b6270';ctx.textAlign='right';
+  ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=1;
+  for(let g=0;g<=4;g++){{
+    const val=yLo+(yHi-yLo)*(1-g/4),yy=padT+eqH*g/4;
+    ctx.beginPath();ctx.moveTo(padL,yy);ctx.lineTo(W-padR,yy);ctx.stroke();
+    ctx.fillText('$'+Math.round(val).toLocaleString(),padL-8,yy+4);
+  }}
+  // equity area — modern gradient
+  const greenColor='#3df58c',redColor='#ff5a52';
+  const isProfit=EQ[last-1]>=START;
+  const mainColor=isProfit?greenColor:redColor;
+  const grA=ctx.createLinearGradient(0,padT,0,padT+eqH);
+  grA.addColorStop(0,isProfit?'rgba(61,245,140,.42)':'rgba(255,90,82,.42)');
+  grA.addColorStop(0.5,isProfit?'rgba(61,245,140,.15)':'rgba(255,90,82,.15)');
+  grA.addColorStop(1,'rgba(61,245,140,0)');
+  ctx.beginPath();ctx.moveTo(xAt(0),padT+eqH);ctx.lineTo(xAt(0),yEq(EQ[0]));
+  for(let i=1;i<last;i++)ctx.lineTo(xAt(i),yEq(EQ[i]));
+  ctx.lineTo(xAt(last-1),padT+eqH);ctx.closePath();ctx.fillStyle=grA;ctx.fill();
+  // start reference dashed
+  ctx.setLineDash([5,5]);ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(padL,yEq(START));ctx.lineTo(W-padR,yEq(START));ctx.stroke();ctx.setLineDash([]);
-  // segment-by-segment neon line (split at crossings) — no JS curlies (template-safe)
-  ctx.lineWidth=2;ctx.shadowBlur=8;
-  let _aA,_bA,_t,_cx,_cy,_col;
-  for(let i=1;i<n;i++) _aA=EQ[i-1]>=START, _bA=EQ[i]>=START,
-    (_aA===_bA)
-      ? (_col=_aA?NG:NR, ctx.strokeStyle=_col, ctx.shadowColor=_col,
-         ctx.beginPath(), ctx.moveTo(xAt(i-1),yEq(EQ[i-1])), ctx.lineTo(xAt(i),yEq(EQ[i])), ctx.stroke())
-      : (_t=(START-EQ[i-1])/(EQ[i]-EQ[i-1]),
-         _cx=xAt(i-1)+_t*(xAt(i)-xAt(i-1)), _cy=yEq(START),
-         _col=_aA?NG:NR, ctx.strokeStyle=_col, ctx.shadowColor=_col,
-         ctx.beginPath(), ctx.moveTo(xAt(i-1),yEq(EQ[i-1])), ctx.lineTo(_cx,_cy), ctx.stroke(),
-         _col=_bA?NG:NR, ctx.strokeStyle=_col, ctx.shadowColor=_col,
-         ctx.beginPath(), ctx.moveTo(_cx,_cy), ctx.lineTo(xAt(i),yEq(EQ[i])), ctx.stroke());
+  ctx.font='10px Consolas';ctx.fillStyle='#5b6270';ctx.textAlign='left';
+  ctx.fillText('start $'+Math.round(START).toLocaleString(),padL+6,yEq(START)-4);
+  // equity line with glow
+  ctx.shadowColor=mainColor;ctx.shadowBlur=12;
+  ctx.strokeStyle=mainColor;ctx.lineWidth=2.4;ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.beginPath();ctx.moveTo(xAt(0),yEq(EQ[0]));
+  for(let i=1;i<last;i++)ctx.lineTo(xAt(i),yEq(EQ[i]));ctx.stroke();
   ctx.shadowBlur=0;
-  // dd line
-  ctx.beginPath();ctx.moveTo(padL,ddTop);ctx.lineTo(W-padR,ddTop);ctx.strokeStyle='rgba(255,255,255,.08)';ctx.stroke();
-  ctx.fillText('0%',padL-6,ddTop+3);ctx.fillText('-'+ddScale.toFixed(1)+'%',padL-6,ddTop+ddH);
-  const dg=ctx.createLinearGradient(0,ddTop,0,ddTop+ddH);dg.addColorStop(0,'rgba(239,91,84,.05)');dg.addColorStop(1,'rgba(239,91,84,.4)');
-  ctx.beginPath();ctx.moveTo(xAt(0),ddTop);for(let i=0;i<n;i++)ctx.lineTo(xAt(i),yDd(dd[i]));ctx.lineTo(xAt(n-1),ddTop);ctx.closePath();ctx.fillStyle=dg;ctx.fill();
-  ctx.beginPath();ctx.moveTo(xAt(0),yDd(dd[0]));for(let i=1;i<n;i++)ctx.lineTo(xAt(i),yDd(dd[i]));ctx.strokeStyle='rgba(239,91,84,.7)';ctx.lineWidth=1.2;ctx.stroke();
+  // head dot
+  const curX=xAt(last-1),curY=yEq(EQ[last-1]);
+  ctx.fillStyle=mainColor;ctx.beginPath();ctx.arc(curX,curY,4.5,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.4)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.arc(curX,curY,8,0,Math.PI*2);ctx.stroke();
+  // peak and trough callouts after animation
+  if(p>=0.95){{
+    const pX=xAt(peakI),pY=yEq(hi);
+    ctx.fillStyle=greenColor;ctx.beginPath();ctx.arc(pX,pY,3.5,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(61,245,140,.95)';ctx.font='bold 11px -apple-system,Segoe UI,sans-serif';
+    ctx.textAlign=pX>W*0.7?'right':'left';
+    ctx.fillText('PEAK $'+Math.round(hi).toLocaleString(),pX>W*0.7?pX-8:pX+8,pY-8);
+    const tX=xAt(_mddI),tY=yEq(EQ[_mddI]);
+    ctx.fillStyle=redColor;ctx.beginPath();ctx.arc(tX,tY,3.5,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,90,82,.9)';ctx.font='11px -apple-system,Segoe UI,sans-serif';
+    ctx.textAlign=tX>W*0.7?'right':'left';
+    ctx.fillText('worst DD -'+maxdd.toFixed(1)+'%',tX>W*0.7?tX-8:tX+8,tY+16);
+  }}
+  // drawdown panel
+  ctx.font='10px Consolas';ctx.fillStyle='#5b6270';ctx.textAlign='right';
+  ctx.strokeStyle='rgba(255,255,255,.05)';
+  ctx.beginPath();ctx.moveTo(padL,ddTop);ctx.lineTo(W-padR,ddTop);ctx.stroke();
+  ctx.fillText('0%',padL-8,ddTop+4);
+  ctx.fillText('-'+ddScale.toFixed(1)+'%',padL-8,ddTop+ddH);
+  const grDD=ctx.createLinearGradient(0,ddTop,0,ddTop+ddH);
+  grDD.addColorStop(0,'rgba(255,90,82,0)');
+  grDD.addColorStop(1,'rgba(255,90,82,.35)');
+  ctx.beginPath();ctx.moveTo(xAt(0),ddTop);
+  for(let i=0;i<last;i++)ctx.lineTo(xAt(i),yDd(dd[i]));
+  ctx.lineTo(xAt(last-1),ddTop);ctx.closePath();ctx.fillStyle=grDD;ctx.fill();
+  ctx.strokeStyle=redColor;ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(xAt(0),yDd(dd[0]));
+  for(let i=1;i<last;i++)ctx.lineTo(xAt(i),yDd(dd[i]));ctx.stroke();
+  // x-axis trade numbers
+  ctx.fillStyle='#5b6270';ctx.font='10px Consolas';ctx.textAlign='center';
+  for(let i=0;i<=6;i++){{
+    const idx=Math.round((n-1)*i/6),xx=xAt(idx);
+    ctx.fillText('#'+idx,xx,H-padB+18);
+    ctx.strokeStyle='rgba(255,255,255,.03)';
+    ctx.beginPath();ctx.moveTo(xx,padT);ctx.lineTo(xx,padT+eqH);ctx.stroke();
+  }}
+  ctx.font='10px -apple-system,Segoe UI,sans-serif';ctx.fillText('trade #',W/2,H-padB+34);
 }}
-draw();window.addEventListener('resize',draw);
+function animate(){{_progress=Math.min(1,_progress+0.022);draw(_progress);if(_progress<1)requestAnimationFrame(animate);}}
+animate();
+window.addEventListener('resize',()=>draw(1));
 </script>
 </body></html>"""
 
