@@ -28,6 +28,21 @@ sys.path.insert(0, str(HERE))
 
 import run_validation
 from validation.auto_refine import auto_refine_validate
+from validation.cross_source import cross_validate_winner, adjust_verdict
+
+
+def _infer_yahoo_symbol(csv_path: str | None) -> str | None:
+    """Guess the Yahoo ticker from a CSV path or symbol string.
+    Returns None if we don't know a Yahoo equivalent."""
+    if not csv_path: return "XAUUSD"
+    stem = Path(csv_path).stem.upper().split("_")[0]
+    # Known mappings (extend in tools/data_loader._YAHOO_ALIAS)
+    known = {"XAUUSD", "XAGUSD", "EURUSD", "GBPUSD", "USDJPY",
+             "USDINR", "BTCUSD", "ETHUSD", "SPX", "NASDAQ"}
+    if stem in known: return stem
+    # MCX gold, custom names — Yahoo has no equivalent
+    if "MCX" in stem or "NIFTY" in stem or "BANKNIFTY" in stem: return None
+    return stem
 
 
 def main():
@@ -44,6 +59,41 @@ def main():
         max_attempts = 3,
         log = log,
     )
+
+    # ---- NEW: cross-source verification (the real bug fix) ----
+    # After a VALIDATED winner is found on primary data, re-run the same
+    # winning params on Yahoo's independent feed. Catches data-source overfit.
+    if verdict.get("final_verdict") == "VALIDATED" and verdict.get("winner"):
+        w = verdict["winner"]
+        yahoo_sym = _infer_yahoo_symbol(csv_path)
+        if yahoo_sym is None:
+            log(f"\n[cross-source] No Yahoo equivalent for '{csv_path}' — skipping.")
+            verdict["final_verdict"] = "VALIDATED_NO_CROSSCHECK"
+            verdict["warning"] = ("No alternate data source available for this symbol. "
+                                  "Single-source validation only. Demo-forward-test mandatory.")
+        else:
+            # Determine timeframe from the last attempt config or default
+            last_cfg = verdict.get("attempts", [{}])[-1].get("config", {})
+            tf = last_cfg.get("exec_tf", "M15")
+            log(f"\n[cross-source] Re-validating winner on Yahoo:{yahoo_sym} ({tf}) ...")
+            try:
+                cross = cross_validate_winner(
+                    family    = w.get("family", "trend"),
+                    params    = w.get("best_params", {}),
+                    yahoo_symbol = yahoo_sym,
+                    timeframe = tf,
+                )
+                verdict = adjust_verdict(verdict, cross)
+                if cross.get("available"):
+                    m = cross["metrics"]
+                    log(f"[cross-source] Yahoo result: PF={m['profit_factor']} "
+                        f"profit=${m['net_profit']} DD={m['max_dd_pct']}% "
+                        f"trades={m['trades']} -> {'PASS' if cross['passed'] else 'FAIL'}")
+                log(f"[cross-source] Final verdict: {verdict['final_verdict']}")
+            except Exception as e:
+                log(f"[cross-source] error: {e}")
+                verdict["cross_source"] = {"available": False, "error": str(e)}
+
     verdict["wrapper_elapsed_sec"] = round(time.time() - t0, 1)
 
     # write wrapper-level log next to the LAST attempt's run_dir if available
